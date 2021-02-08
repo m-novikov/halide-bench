@@ -16,22 +16,21 @@ public:
          _sigma = sigma;
         const int boxSize = 2 * ceil(3 * sigma) + 1;
         const int radius = (boxSize - 1) / 2;
-        vector<float> k(radius * 2 + 1);
+        vector<float> k(radius + 1);
         float ksum = 0.0f;
-        for (int i = -radius;  i <= radius; ++i) {
+        for (int i = 0;  i <= radius; ++i) {
             const float ki = exp(-i * i / (2.0f * sigma * sigma)) / (sqrtf(2 * M_PI) * sigma);
-            k[i + radius] = ki;
-            ksum += ki;
+            k[i] = ki;
+            if (i == 0) {
+                ksum += ki;
+            } else {
+                ksum += 2 * ki;
+            }
         }
-        Buffer<float> kernel(radius * 2 + 1);
+        Buffer<float> kernel(radius + 1);
         for (int i = 0; i < k.size(); ++i) {
             kernel(i) = k[i] / ksum;
         }
-        cout << "Kernel: ";
-        for (int i = 0; i < k.size(); ++i) {
-            cout << kernel(i) << " ";
-        }
-        cout << endl;
         _kernel = kernel;
         _in = ImageParam(Float(32), 2);
         Var x, y;
@@ -39,11 +38,11 @@ public:
         Func blur_x("blur_x");
         Func blur_y("blur_y");
         extended = Halide::BoundaryConditions::mirror_interior(_in);
-        RDom r(-radius, 2 * radius + 1);
-        blur_y(x, y) = sum(kernel(r + radius) * extended(x, y + r));
-        blur_x(x, y) = sum(kernel(r + radius) * blur_y(x + r, y));
-        blur_x.compute_root().vectorize(x, 16);
-        blur_y.compute_at(blur_x, y).vectorize(x, 16);
+        RDom r(1, radius);
+        blur_y(x, y) = kernel(0) * extended(x, y) + sum(kernel(r) * (extended(x, y - r) + extended(x, y + r)));
+        blur_x(x, y) = kernel(0) * blur_y(x, y) + sum(kernel(r) * (blur_y(x - r, y) + blur_y(x + r, y)));
+        blur_x.compute_root().vectorize(x, 8);
+        blur_y.compute_at(blur_x, y).vectorize(x, 8);
         blur_x.compile_jit();
         _blur = blur_x;
      }
