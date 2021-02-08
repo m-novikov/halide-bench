@@ -14,8 +14,7 @@ struct GaussianBlur {
 public:
      GaussianBlur(const float sigma) {
          _sigma = sigma;
-        int boxSize = ceil(3 * sigma);
-        boxSize = boxSize % 2 == 0 ? boxSize + 1 : boxSize;
+        const int boxSize = 2 * ceil(3 * sigma) + 1;
         const int radius = (boxSize - 1) / 2;
         vector<float> k(radius * 2 + 1);
         float ksum = 0.0f;
@@ -26,15 +25,20 @@ public:
         }
         Buffer<float> kernel(radius * 2 + 1);
         for (int i = 0; i < k.size(); ++i) {
-          kernel(i) = k[i] / ksum;
+            kernel(i) = k[i] / ksum;
         }
+        cout << "Kernel: ";
+        for (int i = 0; i < k.size(); ++i) {
+            cout << kernel(i) << " ";
+        }
+        cout << endl;
         _kernel = kernel;
         _in = ImageParam(Float(32), 2);
         Var x, y;
         Func extended("extended");
         Func blur_x("blur_x");
         Func blur_y("blur_y");
-        extended = Halide::BoundaryConditions::repeat_edge(_in);
+        extended = Halide::BoundaryConditions::mirror_interior(_in);
         RDom r(-radius, 2 * radius + 1);
         blur_y(x, y) = sum(kernel(r + radius) * extended(x, y + r));
         blur_x(x, y) = sum(kernel(r + radius) * blur_y(x + r, y));
